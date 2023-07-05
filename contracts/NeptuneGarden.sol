@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "./interfaces/IERC6551Registry.sol";
+import "./interfaces/IERC6551Account.sol";
 
 contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Ownable {
      // ===== 1. Property Variables ===== //
@@ -19,13 +20,16 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     uint public MAX_SUPPLY_PER_WALLET = 3;
     uint public FREE_NFT = 1;
     IERC6551Registry public NeptuneAccountRegistry;
+    address public NeptuneImplementation;
+    uint immutable public salt = 0;
 
     // ===== 2. Lifecycle Methods ===== //
 
-    constructor(address _neptuneAccountRegistry) ERC721("NeptuneGarden", "NG") {
+    constructor(address _neptuneAccountRegistry,address _neptuneImplementation) ERC721("NeptuneGarden", "NG") {
         // Start token ID at 1. By default is starts at 0.
         _tokenIdCounter.increment();
         NeptuneAccountRegistry = IERC6551Registry(_neptuneAccountRegistry);
+        NeptuneImplementation = _neptuneImplementation;
     }
 
      function withdraw() public onlyOwner() {
@@ -61,7 +65,34 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
         _tokenIdCounter.increment();
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
-        NeptuneAccountRegistry.createAccount(address(this), tokenId); // creates token bound account TBA for tokenId
+        NeptuneAccountRegistry.createAccount(
+            NeptuneImplementation,
+            block.chainid,
+            address(this), 
+            tokenId,
+            salt,
+            abi.encodeWithSignature("initialize()", msg.sender)
+        ); // creates token bound account TBA for tokenId
+    }
+
+    // ===== 5. Token Bound Account Functions ===== //
+
+    function showTBA(uint256 _tokenId) external view returns (address) {
+        return NeptuneAccountRegistry.account(
+                    NeptuneImplementation,
+                    block.chainid,
+                    address(this),
+                    _tokenId,
+                    salt
+                );
+    }
+
+    function showTBAOwner(address payable _tba) external view returns (address) {
+        return IERC6551Account(_tba).owner();
+    }
+
+    function showTBAInfo(address payable _tba) external view returns (uint256 chainId,address tokenContract,uint256 tokenId) {
+        return IERC6551Account(_tba).token();
     }
 
     // The following functions are overrides required by Solidity.
@@ -94,4 +125,6 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     {
         return super.supportsInterface(interfaceId);
     }
+
+    
 }
