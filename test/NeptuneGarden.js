@@ -160,15 +160,47 @@ describe('Neptune Garden contracts', () => {
                     sampleUri,
                     {value:mintPrice}
                 )
+
+            await neptuneGarden
+                .connect(addr1).safeMint(
+                    ownerAddress,
+                    sampleUri,
+                    // {value:mintPrice}
+                )
             
             await expect(neptuneGarden
                     .connect(owner).safeMint(
                         ownerAddress,
                         sampleUri,
                         {value:mintPrice}
-                    )).to.be.revertedWith("Sorry, mint limit for wallet reached!");
+                    )).to.be.revertedWith("Sorry, wallet limit reached!");
+
+        })
+
+
+        it('Should revert if minted more than 1 NFTs in auction', async () => {
+            const mintPrice = ethers.parseEther("0.05")
+            const sampleUri = ""
+            const ownerAddress = owner.address            
+            await neptuneGarden.connect(owner).activateAuction()
+            await neptuneGarden
+                    .connect(owner).safeMint(
+                        ownerAddress,
+                        sampleUri
+                    );
+
+
+            
+            await expect(neptuneGarden
+                    .connect(owner).safeMint(
+                        ownerAddress,
+                        sampleUri,
+                        {value:mintPrice}
+                    )).to.be.revertedWith("Sorry, auction limit reached!");
 
         })
 
     });
+
+    
 })

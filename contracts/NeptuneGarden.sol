@@ -11,17 +11,25 @@ import "./interfaces/IERC6551Registry.sol";
 import "./interfaces/IERC6551Account.sol";
 
 contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Ownable {
-     // ===== 1. Property Variables ===== //
+
+    // Events
+    event ActivatedAuction(address account);
+    event DeactivatedAuction(address account);
+
+    // ===== 1. Property Variables ===== //
     using Counters for Counters.Counter;
 
     Counters.Counter private _tokenIdCounter;
     uint256 public MINT_PRICE = 0.05 ether;
     uint public MAX_SUPPLY = 8623;
-    uint public MAX_SUPPLY_PER_WALLET = 3;
+    uint public WALLET_LIMIT = 3;
+    uint public AUCTION_LIMIT = 1;
     uint public FREE_NFT = 1;
     IERC6551Registry public NeptuneAccountRegistry;
     address public NeptuneImplementation;
     uint immutable public salt = 0;
+    bool private _auctioned;
+    mapping(address => uint) _minted;
 
     // ===== 2. Lifecycle Methods ===== //
 
@@ -52,17 +60,38 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
         _unpause();
     }
 
-    // ===== 4. Minting Functions ===== //
+    // ===== 3. Auction Functions ===== //
 
-    function safeMint(address to, string memory uri) public payable {
+    function auctioned() external view virtual returns (bool) {
+        return _auctioned;
+    }
+    
+    function activateAuction() external onlyOwner {
+        _auctioned = true;
+        emit ActivatedAuction(msg.sender);
+    }
+
+    function deactivateAuction() external onlyOwner {
+        _auctioned = false;
+        emit ActivatedAuction(msg.sender);
+    }
+
+    // ===== 5. Minting Functions ===== //
+
+    function safeMint(address to, string memory uri) public payable whenNotPaused() {
         uint256 tokenId = _tokenIdCounter.current();
-        uint walletBalance = balanceOf(msg.sender);
+        address _account = msg.sender;
+        uint walletBalance = _minted[_account];
         if(walletBalance >= FREE_NFT){
             require(msg.value >= MINT_PRICE, "Sorry, amount less than mint price!");
         }
-        require(walletBalance < MAX_SUPPLY_PER_WALLET, "Sorry, mint limit for wallet reached!");
+        if(_auctioned){
+            require(walletBalance < AUCTION_LIMIT, "Sorry, auction limit reached!");
+        }
+        require(walletBalance < WALLET_LIMIT, "Sorry, wallet limit reached!");
         require(tokenId <= MAX_SUPPLY, "Sorry, all NFTs have been minted!");
         _tokenIdCounter.increment();
+        _minted[_account] += 1;
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
         NeptuneAccountRegistry.createAccount(
@@ -75,7 +104,12 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
         ); // creates token bound account TBA for tokenId
     }
 
-    // ===== 5. Token Bound Account Functions ===== //
+    function minted(address _account) external view returns(uint){
+        return _minted[_account];
+    }
+
+
+    // ===== 6. Token Bound Account Functions ===== //
 
     function showTBA(uint256 _tokenId) external view returns (address) {
         return NeptuneAccountRegistry.account(
