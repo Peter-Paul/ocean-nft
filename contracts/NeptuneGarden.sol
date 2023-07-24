@@ -45,7 +45,7 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     uint256 constant SECONDS_IN_MINUTE = 60;
     uint256 private pearlsPerMinute = 1;
 
-    // ===== 4. Lifecycle Methods ===== //
+    // ===== 4. Modifiers ===== //
 
     modifier notStaked(uint256 _tokenId){
         require(_isStaked[_tokenId] == false, "Token is staked");
