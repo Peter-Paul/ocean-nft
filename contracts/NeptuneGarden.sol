@@ -6,17 +6,25 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "./interfaces/IERC6551Registry.sol";
 import "./interfaces/IERC6551Account.sol";
 
-contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Ownable {
+contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Ownable, ReentrancyGuard {
+    // ===== 1. Structs ===== //
+    struct Staker {
+        uint256 timeOfLastUpdate;
+        uint256 unclaimedPearls;
+    }
 
-    // Events
+    // ===== 2. Events ===== //
     event ActivatedAuction(address account);
     event DeactivatedAuction(address account);
+    event Staked(address account,address TBA,uint256 tokenId);
+    event Unstaked(address account,address TBA,uint256 tokenId);
 
-    // ===== 1. Property Variables ===== //
+    // ===== 3. Property Variables ===== //
     using Counters for Counters.Counter;
 
     Counters.Counter private _tokenIdCounter;
@@ -30,8 +38,26 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     uint immutable public salt = 0;
     bool private _auctioned;
     mapping(address => uint) _minted;
+    mapping(address => Staker) public stakers;
+    mapping(uint256 => address) public stakerAddress;
+    mapping(address => uint256) public staked;
+    mapping(uint256 => bool) public _isStaked;
+    uint256 constant SECONDS_IN_MINUTE = 60;
+    uint256 private pearlsPerMinute = 1;
 
-    // ===== 2. Lifecycle Methods ===== //
+    // ===== 4. Lifecycle Methods ===== //
+
+    modifier notStaked(uint256 _tokenId){
+        require(_isStaked[_tokenId] == false, "Token is staked");
+        _;
+    }
+
+    modifier isStaked(uint256 _tokenId){
+        require(_isStaked[_tokenId] == true, "Token is not staked");
+        _;
+    }
+
+    // ===== 5. Lifecycle Methods ===== //
 
     constructor(address _neptuneAccountRegistry,address _neptuneImplementation) ERC721("NeptuneGarden", "NG") {
         // Start token ID at 1. By default is starts at 0.
@@ -50,7 +76,7 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     }
 
 
-    // ===== 3. Pauseable Functions ===== //
+    // ===== 6. Pauseable Functions ===== //
 
     function pause() public onlyOwner {
         _pause();
@@ -60,7 +86,7 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
         _unpause();
     }
 
-    // ===== 3. Auction Functions ===== //
+    // ===== 7. Auction Functions ===== //
 
     function auctioned() external view virtual returns (bool) {
         return _auctioned;
@@ -76,9 +102,9 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
         emit ActivatedAuction(msg.sender);
     }
 
-    // ===== 5. Minting Functions ===== //
+    // ===== 8. Minting Functions ===== //
 
-    function safeMint(address to, string memory uri) public payable whenNotPaused() {
+    function safeMint(address to, string memory uri) public payable whenNotPaused {
         uint256 tokenId = _tokenIdCounter.current();
         address _account = msg.sender;
         uint walletBalance = _minted[_account];
@@ -109,9 +135,9 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     }
 
 
-    // ===== 6. Token Bound Account Functions ===== //
+    // ===== 9. Token Bound Account Functions ===== //
 
-    function showTBA(uint256 _tokenId) external view returns (address) {
+    function showTBA(uint256 _tokenId) public view returns (address) {
         return NeptuneAccountRegistry.account(
                     NeptuneImplementation,
                     block.chainid,
@@ -129,16 +155,75 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
         return IERC6551Account(_tba).token();
     }
 
+    // ===== 10. Staking Functions ===== //
+
+    function stake(uint256 _tokenId) external whenNotPaused {
+        address user = msg.sender;
+        require(ownerOf(_tokenId) == user, "Can't stake tokens you don't own!");
+        require(staked[user] <  WALLET_LIMIT, "Sorry, stake limit reached!" );
+        address TBA = showTBA(_tokenId);
+        Staker storage staker = stakers[TBA];
+        staker.timeOfLastUpdate = block.timestamp;
+        staked[user]+=1;
+        stakerAddress[_tokenId] = user;
+        _isStaked[_tokenId] = true;
+        emit Staked(user,TBA,_tokenId);
+    }
+
+    function unstake(uint256 _tokenId) external nonReentrant {
+        address user = msg.sender;
+        require(staked[user] > 0, "You have no tokens staked!");
+        require(stakerAddress[_tokenId] == user, "You did not stake this token!");
+        address TBA = showTBA(_tokenId);
+        updatePearls(TBA);
+        _isStaked[_tokenId] = false;
+        staked[user]-=1;
+        delete stakerAddress[_tokenId];
+        emit Unstaked(user,TBA,_tokenId);
+    }
+
+    function stakeInfo(uint256 _tokenId)
+        public
+        isStaked(_tokenId)
+        view
+        returns (uint256 _availableRewards)
+    {
+        address TBA = showTBA(_tokenId);
+        return availableRewards(TBA);
+    }
+
+    // ---- Internal Staking functions ---- //
+    function calculatePearls(address _staker) internal view returns (uint256 _rewards) {
+        Staker memory staker = stakers[_staker];
+        return (
+            (((block.timestamp - staker.timeOfLastUpdate)) * pearlsPerMinute)
+                / SECONDS_IN_MINUTE
+        );
+    }
+
+    function updatePearls(address _staker) internal {
+        Staker storage staker = stakers[_staker];
+
+        staker.unclaimedPearls += calculatePearls(_staker);
+        staker.timeOfLastUpdate = block.timestamp;
+    }
+
+    function availableRewards(address _TBA) internal view returns (uint256 _rewards) {
+        Staker memory staker = stakers[_TBA];
+        _rewards = staker.unclaimedPearls + calculatePearls(_TBA);
+    }
+
     // The following functions are overrides required by Solidity.
 
     function _beforeTokenTransfer(address from, address to, uint256 tokenId,uint256 batchSize)
         internal
+        notStaked(tokenId)
         override(ERC721, ERC721Enumerable)
     {
         super._beforeTokenTransfer(from, to, tokenId, batchSize);
     }
 
-    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+    function _burn(uint256 tokenId) internal notStaked(tokenId) override(ERC721, ERC721URIStorage) {
         super._burn(tokenId);
     }
 
