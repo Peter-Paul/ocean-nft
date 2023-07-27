@@ -26,6 +26,7 @@ npx hardhat node
 ## Founding Partners
 [Algovera](https://twitter.com/AlgoveraAI)<br>
 [Bacalhau](https://twitter.com/BacalhauProject)<br>
+[Gitcoin](https://twitter.com/gitcoin)<br>
 [Polygon](https://twitter.com/0xPolygonLabs)<br>
 [Protocol Labs](https://twitter.com/protocollabs)<br>
 [Ocean Protocol](https://twitter.com/oceanprotocol)<br>
