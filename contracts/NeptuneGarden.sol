@@ -183,7 +183,7 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     }
 
     function stakeInfo(uint256 _tokenId)
-        public
+        external
         isStaked(_tokenId)
         view
         returns (uint256 _availableRewards)
@@ -218,6 +218,7 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     function _beforeTokenTransfer(address from, address to, uint256 tokenId,uint256 batchSize)
         internal
         notStaked(tokenId)
+        whenNotPaused
         override(ERC721, ERC721Enumerable)
     {
         super._beforeTokenTransfer(from, to, tokenId, batchSize);
