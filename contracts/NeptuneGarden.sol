@@ -2,6 +2,7 @@
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
@@ -11,7 +12,7 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "./interfaces/IERC6551Registry.sol";
 import "./interfaces/IERC6551Account.sol";
 
-contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Ownable, ReentrancyGuard {
+contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Ownable, ReentrancyGuard, ERC2981 {
     // ===== 1. Structs ===== //
     struct Staker {
         uint256 timeOfLastUpdate;
@@ -44,6 +45,7 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     mapping(uint256 => bool) public _isStaked;
     uint256 constant SECONDS_IN_MINUTE = 60;
     uint256 private pearlsPerMinute = 1;
+    uint96 DEFAULT_FEE_NUMERATOR = 500; // 5%
 
     // ===== 4. Modifiers ===== //
 
@@ -64,6 +66,7 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
         _tokenIdCounter.increment();
         NeptuneAccountRegistry = IERC6551Registry(_neptuneAccountRegistry);
         NeptuneImplementation = _neptuneImplementation;
+        _setDefaultRoyalty(msg.sender,DEFAULT_FEE_NUMERATOR); 
     }
 
      function withdraw() public onlyOwner() {
@@ -240,7 +243,7 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721, ERC721Enumerable,ERC721URIStorage)
+        override(ERC721, ERC721Enumerable,ERC721URIStorage,ERC2981)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
