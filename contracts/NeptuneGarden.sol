@@ -78,6 +78,9 @@ contract NeptuneGarden is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, 
         MINT_PRICE = _mintPrice;
     }
 
+    function changeFeeNumerator(uint96 _fee_numerator) public onlyOwner {
+        _setDefaultRoyalty(msg.sender,_fee_numerator);
+    }
 
     // ===== 6. Pauseable Functions ===== //
 
